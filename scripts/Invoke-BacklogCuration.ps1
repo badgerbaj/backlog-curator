@@ -29,7 +29,7 @@ function Import-GameCsv {
         $row | Add-Member -NotePropertyName Source -NotePropertyValue $Source -Force
     }
 
-    return $rows
+    return @($rows)
 }
 
 function Get-Field {
@@ -534,15 +534,16 @@ if (-not (Test-Path -LiteralPath $outputDirectory)) {
     New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 }
 
-$unplayed = Import-GameCsv (Join-Path $dataRoot "unplayed.csv") "unplayed"
-$wishlist = Import-GameCsv (Join-Path $dataRoot "wishlist.csv") "wishlist"
-$completed = Import-GameCsv (Join-Path $dataRoot "completed.csv") "completed"
-$dnf = Import-GameCsv (Join-Path $dataRoot "dnf.csv") "dnf"
-$no = Import-GameCsv (Join-Path $dataRoot "no.csv") "no"
+$backlog = @(Import-GameCsv (Join-Path $dataRoot "backlog.csv") "backlog")
+$unplayed = @(Import-GameCsv (Join-Path $dataRoot "unplayed.csv") "unplayed")
+$wishlist = @(Import-GameCsv (Join-Path $dataRoot "wishlist.csv") "wishlist")
+$completed = @(Import-GameCsv (Join-Path $dataRoot "completed.csv") "completed")
+$dnf = @(Import-GameCsv (Join-Path $dataRoot "dnf.csv") "dnf")
+$no = @(Import-GameCsv (Join-Path $dataRoot "no.csv") "no")
 
-$rules = Read-MarkdownRules $rulesRoot
+$rules = @(Read-MarkdownRules $rulesRoot)
 $history = Build-HistoryProfile -Completed $completed -Dnf $dnf -No $no
-$evaluationRows = @($unplayed + $wishlist + $dnf + $no)
+$evaluationRows = @($backlog + $unplayed + $wishlist + $dnf + $no)
 $evaluations = @(
     foreach ($row in $evaluationRows) {
         $title = Get-Field $row @("Title", "Name", "Game")
@@ -562,7 +563,7 @@ $lines.Add("This report applies personal taste rules first, uses completed/DNF/N
 $lines.Add("")
 
 if ($evaluations.Count -eq 0) {
-    $lines.Add("No games were found in `data/unplayed.csv`, `data/wishlist.csv`, `data/dnf.csv`, or `data/no.csv`.")
+    $lines.Add("No games were found in `data/backlog.csv`, `data/unplayed.csv`, `data/wishlist.csv`, `data/dnf.csv`, or `data/no.csv`.")
     $lines.Add("")
     $lines.Add("Add rows to the CSV files, then rerun `.\scripts\Invoke-BacklogCuration.ps1`.")
 }
@@ -596,6 +597,9 @@ else {
 $lines.Add("## Rule Inputs")
 $lines.Add("")
 $lines.Add("- Parsed rules: $($rules.Count)")
+$lines.Add("- Backlog rows: $($backlog.Count)")
+$lines.Add("- Computed unplayed rows: $($unplayed.Count)")
+$lines.Add("- Wishlist rows: $($wishlist.Count)")
 $lines.Add("- Completed evidence rows: $($completed.Count)")
 $lines.Add("- DNF evidence rows: $($dnf.Count)")
 $lines.Add("- No evidence rows: $($no.Count)")

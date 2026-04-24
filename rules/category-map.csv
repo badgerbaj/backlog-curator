@@ -1,7 +1,7 @@
 SteamCollection,BacklogCategory,TargetCsv
-ShortList,Shortlist,unplayed.csv
-Shortlist,Shortlist,unplayed.csv
-Yes: Later,Yes: Later,unplayed.csv
+ShortList,Shortlist,backlog.csv
+Shortlist,Shortlist,backlog.csv
+Yes: Later,Yes: Later,backlog.csv
 Credits Rolled,Completed,completed.csv
 DNF,DNF,dnf.csv
 No,No,no.csv

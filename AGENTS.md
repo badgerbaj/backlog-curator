@@ -12,7 +12,8 @@ This project curates a Steam backlog from CSV files and local preference rules.
 
 ## Inputs
 
-- `data/unplayed.csv`: owned games that need evaluation.
+- `data/backlog.csv`: manually categorized owned candidates such as `Shortlist` and `Yes: Later`.
+- `data/unplayed.csv`: computed zero-playtime owned games that still compete for attention.
 - `data/wishlist.csv`: unowned wishlist games.
 - `data/completed.csv`: positive and negative evidence from finished games.
 - `data/dnf.csv`: tested games rejected by experience.

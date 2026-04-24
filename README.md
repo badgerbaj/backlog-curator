@@ -78,14 +78,18 @@ rules/category-map.csv
 By default:
 
 ```text
-ShortList      -> unplayed.csv, CurrentCategory=Shortlist
-Yes: Later     -> unplayed.csv, CurrentCategory=Yes: Later
+ShortList      -> backlog.csv, CurrentCategory=Shortlist
+Yes: Later     -> backlog.csv, CurrentCategory=Yes: Later
 Credits Rolled -> completed.csv
 DNF            -> dnf.csv
 No             -> no.csv
 ```
 
 Rows are merged by `AppId`. User-maintained fields such as `Notes`, `Reason`, `Rating`, `ReviewSignal`, `Genres`, and `Tags` are preserved when possible.
+
+`backlog.csv` holds manually categorized owned candidates such as `Shortlist` and `Yes: Later`.
+
+`unplayed.csv` is reserved for the computed literal zero-playtime owned set. It is derived locally from Steam library cache and playtime data, then filtered by the `No` category and Steam's explicit `Unplayed` overrides.
 
 ## Import Steam Collections
 
