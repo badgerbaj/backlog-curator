@@ -1,0 +1,3 @@
+display_name: Backlog Curator
+short_description: Curate Steam backlog CSVs with local category imports and taste rules.
+default_prompt: Help me run or use the backlog-curator workflow for my Steam library.

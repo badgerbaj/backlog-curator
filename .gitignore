@@ -1,0 +1,11 @@
+.dotnet/
+.templateengine/
+.nuget/
+.appdata/
+bin/
+obj/
+*.user
+*.tmp
+data/*.csv
+!data/*.example.csv
+outputs/*.md
