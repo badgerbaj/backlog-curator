@@ -14,6 +14,7 @@ This project curates a Steam backlog from CSV files and local preference rules.
 
 - `data/backlog.csv`: manually categorized owned candidates such as `Shortlist` and `Yes: Later`.
 - `data/unplayed.csv`: computed zero-playtime owned games that still compete for attention.
+- `data/game_metadata.csv`: cached generated metadata from Steam store endpoints and HowLongToBeat.
 - `data/wishlist.csv`: unowned wishlist games.
 - `data/completed.csv`: positive and negative evidence from finished games.
 - `data/dnf.csv`: tested games rejected by experience.
@@ -31,6 +32,7 @@ Run the local Steam import and sync from the project root:
 .\scripts\Import-SteamCollections.ps1
 .\scripts\Import-SteamAppInfo.ps1
 .\scripts\Sync-SteamCategories.ps1
+.\scripts\Update-GameMetadata.ps1
 ```
 
 Run the curator report:

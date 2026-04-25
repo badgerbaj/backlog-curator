@@ -24,16 +24,18 @@ The local sync path is:
 .\scripts\Import-SteamCollections.ps1
 .\scripts\Import-SteamAppInfo.ps1
 .\scripts\Sync-SteamCategories.ps1
+.\scripts\Update-GameMetadata.ps1
 .\scripts\Invoke-BacklogCuration.ps1
 ```
 
-This keeps category ingestion local. Steam collection membership comes from your Steam userdata files, and game titles come from Steam's local `appcache\appinfo.vdf`.
+This keeps category ingestion local, then adds a repo-controlled enrichment step for store metadata and runtime estimates. Steam collection membership comes from your Steam userdata files, game titles come from Steam's local `appcache\appinfo.vdf`, and optional enrichment comes from Steam store endpoints plus HowLongToBeat.
 
 Requirements:
 
 - PowerShell 7 or Windows PowerShell.
 - .NET SDK 10 for `tools/SteamMetadataReader`.
 - Local read access to your Steam install and userdata.
+- Network access for `Update-GameMetadata.ps1` if you want genres, tags, review summary, and estimated hours.
 
 ## Codex Skill
 
@@ -176,6 +178,59 @@ AppId,Title,Type,Developer,Publisher,Franchise,LastUpdated,ChangeNumber
 ```
 
 This does not prove ownership by itself. `appinfo.vdf` is a metadata cache, so the sync script uses it to name and enrich games discovered from Steam collections.
+
+## Enrich Game Metadata
+
+The metadata enrichment step writes:
+
+```text
+data/game_metadata.csv
+```
+
+Run:
+
+```powershell
+.\scripts\Update-GameMetadata.ps1
+```
+
+Optional arguments:
+
+```powershell
+.\scripts\Update-GameMetadata.ps1 -RefreshDays 14 -ThrottleMilliseconds 750
+.\scripts\Update-GameMetadata.ps1 -Force
+.\scripts\Update-GameMetadata.ps1 -SkipHltb
+```
+
+This script is repo-controlled and does not install runtime dependencies from outside the repo. It performs direct HTTP requests and caches the results locally so future syncs can reuse them.
+
+It enriches:
+
+- `Genres` from Steam store metadata.
+- `Tags` from Steam store page tags when available.
+- `ReviewSignal` from Steam review summary.
+- `EstimatedHours` from HowLongToBeat `Main Story` time.
+
+If an external source blocks or rejects anonymous scripted traffic, the script leaves that field blank and continues. This is most likely to affect `EstimatedHours`, so the script supports `-SkipHltb` when you want Steam-only enrichment.
+
+The cache also stores:
+
+- `ReviewCount`
+- `EstimatedHoursBucket`
+- `HltbMainHours`
+- `HltbPlusHours`
+- `HltbCompletionistHours`
+- `HltbMatch`
+
+`Update-GameMetadata.ps1` also applies the generated metadata back into:
+
+- `backlog.csv`
+- `unplayed.csv`
+- `wishlist.csv`
+- `completed.csv`
+- `dnf.csv`
+- `no.csv`
+
+These fields are treated as generated metadata, not hand-maintained notes. Keep your personal reasoning in `Notes`, `Reason`, and `Rating`.
 
 ### Unplayed Policy
 

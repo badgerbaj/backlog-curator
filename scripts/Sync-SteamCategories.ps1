@@ -181,6 +181,24 @@ function Get-ExistingValue {
     return Get-Field $ExistingRows[$AppId] $Column
 }
 
+function Get-GeneratedMetadataValue {
+    param(
+        [hashtable]$ExistingRows,
+        [hashtable]$MetadataByAppId,
+        [string]$AppId,
+        [string]$Column
+    )
+
+    if ($MetadataByAppId.ContainsKey($AppId)) {
+        $metadataValue = Get-Field $MetadataByAppId[$AppId] $Column
+        if (-not [string]::IsNullOrWhiteSpace($metadataValue)) {
+            return $metadataValue
+        }
+    }
+
+    return Get-ExistingValue $ExistingRows $AppId $Column
+}
+
 function Get-AppTitle {
     param(
         [hashtable]$AppsById,
@@ -201,6 +219,213 @@ function Get-AppTitle {
     }
 
     return "App $AppId"
+}
+
+function Get-AppMetadataValue {
+    param(
+        [hashtable]$AppsById,
+        [string]$AppId,
+        [string]$Column
+    )
+
+    if (-not $AppsById.ContainsKey($AppId)) {
+        return ""
+    }
+
+    return Get-Field $AppsById[$AppId] $Column
+}
+
+function Get-CleanTitle {
+    param([string]$Title)
+
+    if ([string]::IsNullOrWhiteSpace($Title)) {
+        return ""
+    }
+
+    $clean = $Title.Trim()
+    $clean = $clean -replace '\s+\(\d{4}\)$', ''
+    if ($clean -match '^App \d+$') {
+        return ""
+    }
+    return $clean.Trim()
+}
+
+function Get-ValidSeriesValue {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return ""
+    }
+
+    $trimmed = $Value.Trim()
+    if ($trimmed -eq "App") {
+        return ""
+    }
+
+    return $trimmed
+}
+
+function Get-SequenceOrdinal {
+    param([string]$Title)
+
+    $cleanTitle = Get-CleanTitle -Title $Title
+    if ([string]::IsNullOrWhiteSpace($cleanTitle)) {
+        return $null
+    }
+
+    $matches = [regex]::Matches($cleanTitle, '(?<![A-Za-z])(?:Part\s+)?(II|III|IV|V|VI|VII|VIII|IX|X|[2-9]|[1-9][0-9]+)(?![A-Za-z])', 'IgnoreCase')
+    foreach ($match in $matches) {
+        $token = $match.Groups[1].Value.ToUpperInvariant()
+        $number = $null
+
+        switch ($token) {
+            "II" { $number = 2 }
+            "III" { $number = 3 }
+            "IV" { $number = 4 }
+            "V" { $number = 5 }
+            "VI" { $number = 6 }
+            "VII" { $number = 7 }
+            "VIII" { $number = 8 }
+            "IX" { $number = 9 }
+            "X" { $number = 10 }
+            default {
+                $parsed = 0
+                if ([int]::TryParse($token, [ref]$parsed)) {
+                    $number = $parsed
+                }
+            }
+        }
+
+        if ($null -eq $number) {
+            continue
+        }
+
+        if ($number -gt 1 -and $number -le 15) {
+            return $number
+        }
+    }
+
+    return $null
+}
+
+function Get-SeriesFromTitle {
+    param([string]$Title)
+
+    $cleanTitle = Get-CleanTitle -Title $Title
+    if ([string]::IsNullOrWhiteSpace($cleanTitle)) {
+        return ""
+    }
+
+    $patterns = @(
+        '^(?<series>.+?)\s+(?<seq>II|III|IV|V|VI|VII|VIII|IX|X|[2-9]|[1-9][0-9]+)(?:\b|:)',
+        '^(?<series>.+?)\s+(?<seq>II|III|IV|V|VI|VII|VIII|IX|X|[2-9]|[1-9][0-9]+)$'
+    )
+
+    foreach ($pattern in $patterns) {
+        $match = [regex]::Match($cleanTitle, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if (-not $match.Success) {
+            continue
+        }
+
+        $series = $match.Groups["series"].Value.Trim(" ", ":", "-", [char]0x2013, [char]0x2014)
+        if (-not [string]::IsNullOrWhiteSpace($series)) {
+            return $series
+        }
+    }
+
+    return ""
+}
+
+function Get-TitleOrdinal {
+    param(
+        [string]$Title,
+        [string]$Series
+    )
+
+    $explicit = Get-SequenceOrdinal -Title $Title
+    if ($null -ne $explicit) {
+        return $explicit
+    }
+
+    $cleanTitle = Get-CleanTitle -Title $Title
+    if (-not [string]::IsNullOrWhiteSpace($Series) -and $cleanTitle -eq $Series) {
+        return 1
+    }
+
+    return $null
+}
+
+function Get-ResolvedSeries {
+    param(
+        [hashtable]$AppsById,
+        [hashtable]$ExistingSeriesByAppId,
+        [object]$Row,
+        [string]$AppId
+    )
+
+    $rowSeries = Get-ValidSeriesValue (Get-Field $Row "Series")
+    if (-not [string]::IsNullOrWhiteSpace($rowSeries)) {
+        return $rowSeries
+    }
+
+    if ($ExistingSeriesByAppId.ContainsKey($AppId)) {
+        return Get-ValidSeriesValue ([string]$ExistingSeriesByAppId[$AppId])
+    }
+
+    $franchise = Get-ValidSeriesValue (Get-AppMetadataValue -AppsById $AppsById -AppId $AppId -Column "Franchise")
+    if (-not [string]::IsNullOrWhiteSpace($franchise)) {
+        return $franchise
+    }
+
+    $title = Get-Field $Row "Title"
+    $titleSeries = Get-ValidSeriesValue (Get-SeriesFromTitle -Title $title)
+    if (-not [string]::IsNullOrWhiteSpace($titleSeries)) {
+        return $titleSeries
+    }
+
+    return ""
+}
+
+function Get-PriorEntriesUnfinishedValue {
+    param(
+        [object]$Row,
+        [string]$AppId,
+        [string]$Series,
+        [hashtable]$CompletedAppIds,
+        [object[]]$OwnedSeriesRows
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Series)) {
+        return ""
+    }
+
+    $title = Get-Field $Row "Title"
+    $ordinal = Get-TitleOrdinal -Title $title -Series $Series
+    if ($null -eq $ordinal -or $ordinal -le 1) {
+        return ""
+    }
+
+    $priorOwned = @(
+        $OwnedSeriesRows |
+            Where-Object {
+                $_.Series -eq $Series -and
+                $_.AppId -ne $AppId -and
+                $null -ne $_.Ordinal -and
+                $_.Ordinal -eq ($ordinal - 1)
+            }
+    )
+
+    if ($priorOwned.Count -eq 0) {
+        return ""
+    }
+
+    foreach ($prior in $priorOwned) {
+        if (-not $CompletedAppIds.ContainsKey($prior.AppId)) {
+            return "true"
+        }
+    }
+
+    return ""
 }
 
 function Get-AccountId {
@@ -335,6 +560,7 @@ $rulesRoot = Resolve-ProjectPath $RulesPath
 
 $collectionsPath = Join-Path $dataRoot "steam_collections.csv"
 $appsPath = Join-Path $dataRoot "steam_apps.csv"
+$metadataPath = Join-Path $dataRoot "game_metadata.csv"
 $categoryMapPath = Join-Path $rulesRoot "category-map.csv"
 
 if (-not (Test-Path -LiteralPath $collectionsPath)) {
@@ -347,6 +573,7 @@ if (-not (Test-Path -LiteralPath $appsPath)) {
 
 $collections = Import-Csv -LiteralPath $collectionsPath
 $appsById = New-IndexedRows (Import-Csv -LiteralPath $appsPath) "AppId"
+$metadataByAppId = New-IndexedRows (Import-OptionalCsv $metadataPath) "AppId"
 $categoryMap = Import-Csv -LiteralPath $categoryMapPath
 $steamRoot = Get-SteamPath -ExplicitPath $SteamPath
 $steamAccountId = Get-AccountId -ExplicitAccountId $AccountId -Collections $collections
@@ -377,6 +604,22 @@ $targetColumns = @{
 $existingByTarget = @{}
 foreach ($target in $targetColumns.Keys) {
     $existingByTarget[$target] = New-IndexedRows (Import-OptionalCsv (Join-Path $dataRoot $target)) "AppId"
+}
+
+$existingSeriesByAppId = @{}
+$allExistingRowsByAppId = @{}
+foreach ($target in $existingByTarget.Keys) {
+    foreach ($appId in $existingByTarget[$target].Keys) {
+        if (-not $allExistingRowsByAppId.ContainsKey($appId)) {
+            $allExistingRowsByAppId[$appId] = $existingByTarget[$target][$appId]
+        }
+
+        $series = Get-ExistingValue $existingByTarget[$target] $appId "Series"
+        $series = Get-ValidSeriesValue $series
+        if (-not [string]::IsNullOrWhiteSpace($series) -and -not $existingSeriesByAppId.ContainsKey($appId)) {
+            $existingSeriesByAppId[$appId] = $series
+        }
+    }
 }
 
 $generated = @{
@@ -431,10 +674,10 @@ foreach ($row in $collections) {
                 AppId = $appId
                 Title = $title
                 Rating = Get-ExistingValue $existing $appId "Rating"
-                Genres = Get-ExistingValue $existing $appId "Genres"
-                Tags = Get-ExistingValue $existing $appId "Tags"
+                Genres = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Genres"
+                Tags = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Tags"
                 Series = Get-ExistingValue $existing $appId "Series"
-                ReviewSignal = Get-ExistingValue $existing $appId "ReviewSignal"
+                ReviewSignal = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "ReviewSignal"
                 Notes = Get-ExistingValue $existing $appId "Notes"
             }
         }
@@ -443,8 +686,8 @@ foreach ($row in $collections) {
                 AppId = $appId
                 Title = $title
                 HoursPlayed = if ($playedMinutesByAppId.ContainsKey($appId)) { Format-HoursPlayed $playedMinutesByAppId[$appId] } else { Get-ExistingValue $existing $appId "HoursPlayed" }
-                Genres = Get-ExistingValue $existing $appId "Genres"
-                Tags = Get-ExistingValue $existing $appId "Tags"
+                Genres = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Genres"
+                Tags = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Tags"
                 Series = Get-ExistingValue $existing $appId "Series"
                 Reason = Get-ExistingValue $existing $appId "Reason"
                 Notes = Get-ExistingValue $existing $appId "Notes"
@@ -454,8 +697,8 @@ foreach ($row in $collections) {
             $generated[$target] += [pscustomobject]@{
                 AppId = $appId
                 Title = $title
-                Genres = Get-ExistingValue $existing $appId "Genres"
-                Tags = Get-ExistingValue $existing $appId "Tags"
+                Genres = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Genres"
+                Tags = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Tags"
                 Series = Get-ExistingValue $existing $appId "Series"
                 Reason = Get-ExistingValue $existing $appId "Reason"
                 Notes = Get-ExistingValue $existing $appId "Notes"
@@ -466,13 +709,13 @@ foreach ($row in $collections) {
                 AppId = $appId
                 Title = $title
                 CurrentCategory = $category
-                Genres = Get-ExistingValue $existing $appId "Genres"
-                Tags = Get-ExistingValue $existing $appId "Tags"
+                Genres = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Genres"
+                Tags = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "Tags"
                 Series = Get-ExistingValue $existing $appId "Series"
-                PriorEntriesUnfinished = Get-ExistingValue $existing $appId "PriorEntriesUnfinished"
+                PriorEntriesUnfinished = ""
                 HoursPlayed = if ($playedMinutesByAppId.ContainsKey($appId)) { Format-HoursPlayed $playedMinutesByAppId[$appId] } else { Get-ExistingValue $existing $appId "HoursPlayed" }
-                EstimatedHours = Get-ExistingValue $existing $appId "EstimatedHours"
-                ReviewSignal = Get-ExistingValue $existing $appId "ReviewSignal"
+                EstimatedHours = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "EstimatedHours"
+                ReviewSignal = Get-GeneratedMetadataValue $existing $metadataByAppId $appId "ReviewSignal"
                 Notes = Get-ExistingValue $existing $appId "Notes"
             }
         }
@@ -494,14 +737,73 @@ foreach ($appId in $computedUnplayedIds) {
         AppId = $appId
         Title = Get-AppTitle -AppsById $appsById -ExistingRows $existingUnplayed -AppId $appId
         CurrentCategory = ""
-        Genres = Get-ExistingValue $existingUnplayed $appId "Genres"
-        Tags = Get-ExistingValue $existingUnplayed $appId "Tags"
+        Genres = Get-GeneratedMetadataValue $existingUnplayed $metadataByAppId $appId "Genres"
+        Tags = Get-GeneratedMetadataValue $existingUnplayed $metadataByAppId $appId "Tags"
         Series = Get-ExistingValue $existingUnplayed $appId "Series"
-        PriorEntriesUnfinished = Get-ExistingValue $existingUnplayed $appId "PriorEntriesUnfinished"
+        PriorEntriesUnfinished = ""
         HoursPlayed = "0"
-        EstimatedHours = Get-ExistingValue $existingUnplayed $appId "EstimatedHours"
-        ReviewSignal = Get-ExistingValue $existingUnplayed $appId "ReviewSignal"
+        EstimatedHours = Get-GeneratedMetadataValue $existingUnplayed $metadataByAppId $appId "EstimatedHours"
+        ReviewSignal = Get-GeneratedMetadataValue $existingUnplayed $metadataByAppId $appId "ReviewSignal"
         Notes = Get-ExistingValue $existingUnplayed $appId "Notes"
+    }
+}
+
+$completedAppIds = @{}
+foreach ($row in @($existingByTarget["completed.csv"].Values) + @($generated["completed.csv"])) {
+    $appId = Get-Field $row "AppId"
+    if (-not [string]::IsNullOrWhiteSpace($appId)) {
+        $completedAppIds[$appId] = $true
+    }
+}
+
+$ownedContextIds = @(
+    ($ownedAppIds + @(
+        foreach ($target in @("completed.csv", "dnf.csv", "no.csv", "backlog.csv", "unplayed.csv")) {
+            foreach ($row in @($generated[$target])) {
+                $appId = Get-Field $row "AppId"
+                if (-not [string]::IsNullOrWhiteSpace($appId)) {
+                    $appId
+                }
+            }
+        }
+    )) | Sort-Object -Unique
+)
+
+$ownedSeriesRows = @(
+    foreach ($appId in $ownedContextIds) {
+        $title = Get-AppTitle -AppsById $appsById -ExistingRows $allExistingRowsByAppId -AppId $appId
+        $series = ""
+        if ($existingSeriesByAppId.ContainsKey($appId)) {
+            $series = Get-ValidSeriesValue ([string]$existingSeriesByAppId[$appId])
+        }
+        if ([string]::IsNullOrWhiteSpace($series)) {
+            $series = Get-ValidSeriesValue (Get-AppMetadataValue -AppsById $appsById -AppId $appId -Column "Franchise")
+        }
+
+        [pscustomobject]@{
+            AppId = $appId
+            Title = $title
+            Series = $series
+            Ordinal = Get-TitleOrdinal -Title $title -Series $series
+        }
+    }
+)
+
+foreach ($target in @("completed.csv", "dnf.csv", "no.csv", "backlog.csv", "unplayed.csv")) {
+    foreach ($row in @($generated[$target])) {
+        $appId = Get-Field $row "AppId"
+        if ([string]::IsNullOrWhiteSpace($appId)) {
+            continue
+        }
+
+        $series = Get-ResolvedSeries -AppsById $appsById -ExistingSeriesByAppId $existingSeriesByAppId -Row $row -AppId $appId
+        $row.PSObject.Properties["Series"].Value = $series
+
+        if ($target -in @("backlog.csv", "unplayed.csv")) {
+            $row.PSObject.Properties["PriorEntriesUnfinished"].Value = (
+                Get-PriorEntriesUnfinishedValue -Row $row -AppId $appId -Series $series -CompletedAppIds $completedAppIds -OwnedSeriesRows $ownedSeriesRows
+            )
+        }
     }
 }
 

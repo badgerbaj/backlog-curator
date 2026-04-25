@@ -16,3 +16,9 @@ The Steam metadata reader uses ValveResourceFormat/ValveKeyValue to deserialize 
 - NuGet: https://www.nuget.org/packages/ValveKeyValue
 - License: MIT
 
+## HowLongToBeat Wrapper References
+
+`Update-GameMetadata.ps1` does not ship a runtime dependency on a third-party HowLongToBeat package, but its request/response handling was informed by public wrapper projects and public examples describing the HLTB search API shape.
+
+- Reference repository: https://github.com/ckatzorke/howlongtobeat
+- Reference repository: https://github.com/RedSkiesReaperr/howlongtobeat

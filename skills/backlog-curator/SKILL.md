@@ -28,6 +28,7 @@ From the project root, use PowerShell:
 pwsh ./scripts/Import-SteamCollections.ps1
 pwsh ./scripts/Import-SteamAppInfo.ps1
 pwsh ./scripts/Sync-SteamCategories.ps1
+pwsh ./scripts/Update-GameMetadata.ps1
 pwsh ./scripts/Invoke-BacklogCuration.ps1
 ```
 
@@ -38,6 +39,7 @@ Expected dependencies:
 - PowerShell or PowerShell 7.
 - .NET SDK 10 for `tools/SteamMetadataReader`.
 - Local read access to Steam install/userdata for local import.
+- Network access for `Update-GameMetadata.ps1` if metadata enrichment is requested.
 
 If `dotnet restore` is needed and network is sandboxed, request approval. Keep `DOTNET_CLI_HOME`, `NUGET_PACKAGES`, and `APPDATA` pointed inside the repo if the normal user profile paths are blocked.
 
@@ -71,10 +73,12 @@ Steam collection aliases live in `rules/category-map.csv`. Update that map rathe
 1. Read `README.md`, `AGENTS.md`, and `rules/`.
 2. Check whether `data/steam_collections.csv`, `data/steam_apps.csv`, and `outputs/recommendations.md` exist.
 3. If data is stale or missing, offer to run the local sync workflow.
-4. Review one slice at a time: `Shortlist`, `Sample`, `Yes: Later`, `DNF`, or `No`.
-5. Prioritize personal taste rules over generic review sentiment.
-6. Preserve hand-authored fields such as `Notes`, `Reason`, `Rating`, `ReviewSignal`, `Genres`, and `Tags`.
-7. When confidence is low, recommend a bounded sample rather than overclaiming.
+4. If `Genres`, `Tags`, `ReviewSignal`, or `EstimatedHours` are sparse, offer to run `Update-GameMetadata.ps1`.
+5. Review one slice at a time: `Shortlist`, `Sample`, `Yes: Later`, `DNF`, or `No`.
+6. Prioritize personal taste rules over generic review sentiment.
+7. Preserve hand-authored fields such as `Notes`, `Reason`, and `Rating`.
+8. Treat `Genres`, `Tags`, `ReviewSignal`, and `EstimatedHours` as generated metadata fields unless the user explicitly wants manual overrides.
+9. When confidence is low, recommend a bounded sample rather than overclaiming.
 
 ## Editing Guidance
 
@@ -92,4 +96,3 @@ Useful prompts to support:
 - "Help tune my taste rules based on these wrong recommendations."
 - "Explain why this game is not competing for attention."
 - "Prepare a public-safe commit that excludes generated library data."
-
